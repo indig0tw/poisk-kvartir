@@ -11,6 +11,16 @@ from scraper import build_search_url, fetch_ad_details, fetch_search_results
 
 logger = logging.getLogger("apartment_finder")
 
+# Tauschwohnung - это обмен квартирами между жильцами, а не аренда у
+# арендодателя (часто у соцжилья с фиксированной привязкой к квартире) -
+# пользователю такое не подходит, отсеиваем по названию.
+_EXCLUDED_KEYWORDS = ("tausch",)
+
+
+def _is_excluded(title: str) -> bool:
+    lowered = title.lower()
+    return any(keyword in lowered for keyword in _EXCLUDED_KEYWORDS)
+
 
 def _format_message(city: City, title: str, kaltmiete: float | None, kaltmiete_note: str,
                      wohnflaeche: float | None, url: str) -> str:
@@ -46,6 +56,10 @@ async def check_city(client: httpx.AsyncClient, conn: sqlite3.Connection, city: 
         if storage.is_seen(conn, result.ad_id):
             continue
 
+        if _is_excluded(result.title):
+            storage.mark_seen(conn, result.ad_id, city.name, False, result.title, None, None, result.url)
+            continue
+
         details = await fetch_ad_details(client, result.url)
 
         size_ok = details.wohnflaeche is None or details.wohnflaeche <= max_wohnflaeche_qm
@@ -78,6 +92,10 @@ async def check_city_immowelt(client: httpx.AsyncClient, conn: sqlite3.Connectio
         # с числовыми id Kleinanzeigen в общей таблице просмотренных.
         seen_id = f"iw:{listing.ad_id}"
         if storage.is_seen(conn, seen_id):
+            continue
+
+        if _is_excluded(listing.title):
+            storage.mark_seen(conn, seen_id, city.name, False, listing.title, None, None, listing.url)
             continue
 
         size_ok = listing.wohnflaeche is None or listing.wohnflaeche <= max_wohnflaeche_qm

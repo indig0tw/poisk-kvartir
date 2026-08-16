@@ -161,3 +161,31 @@ async def test_immowelt_ids_do_not_collide_with_kleinanzeigen_ids(monkeypatch, c
     await tracker.check_city_immowelt(http_client, conn, CITY, 55.0, 10, "token", "chat")
 
     assert len(sent) == 1
+
+
+async def test_tauschwohnung_is_excluded_on_kleinanzeigen(monkeypatch, conn, http_client):
+    result = SearchResult(ad_id="6", url="https://example.test/6", title="Suche Tauschwohnung 3 gegen 2 Zimmer")
+    _patch_search(monkeypatch, [result])
+
+    async def fail_if_called(client, url):
+        raise AssertionError("для Tauschwohnung не нужно ходить за деталями объявления")
+
+    monkeypatch.setattr(tracker, "fetch_ad_details", fail_if_called)
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city(http_client, conn, CITY, 1.3, 55.0, 10, 0, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "6") is True
+
+
+async def test_tauschwohnung_is_excluded_on_immowelt(monkeypatch, conn, http_client):
+    listing = ImmoweltListing(ad_id="iw5", url="https://immowelt.test/5", title="Tauschwohnung gesucht",
+                               kaltmiete=400.0, wohnflaeche=50.0)
+    _patch_immowelt_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immowelt(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "iw:iw5") is True
