@@ -3,6 +3,7 @@ import pytest
 
 import storage
 import tracker
+from immowelt import ImmoweltListing
 from models import City
 from scraper import AdDetails, SearchResult
 
@@ -102,3 +103,61 @@ async def test_already_seen_ad_is_not_reprocessed(monkeypatch, conn, http_client
     await tracker.check_city(http_client, conn, CITY, 1.3, 55.0, 10, 0, "token", "chat")
 
     assert sent == []
+
+
+def _patch_immowelt_listings(monkeypatch, listings):
+    async def fake_fetch_listings(client, url, limit):
+        return listings
+
+    monkeypatch.setattr(tracker.immowelt, "fetch_listings", fake_fetch_listings)
+
+
+async def test_immowelt_matching_listing_triggers_notification(monkeypatch, conn, http_client):
+    listing = ImmoweltListing(ad_id="iw1", url="https://immowelt.test/1", title="Schöne Wohnung Immowelt",
+                               kaltmiete=500.0, wohnflaeche=50.0)
+    _patch_immowelt_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immowelt(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1
+    assert "Schöne Wohnung Immowelt" in sent[0]
+    assert "не проверено индивидуально" in sent[0]
+    assert storage.is_seen(conn, "iw:iw1") is True
+
+
+async def test_immowelt_listing_above_cap_is_not_notified_but_marked_seen(monkeypatch, conn, http_client):
+    listing = ImmoweltListing(ad_id="iw2", url="https://immowelt.test/2", title="Teure Wohnung",
+                               kaltmiete=900.0, wohnflaeche=50.0)
+    _patch_immowelt_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immowelt(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "iw:iw2") is True
+
+
+async def test_immowelt_listing_with_unknown_price_is_not_notified(monkeypatch, conn, http_client):
+    listing = ImmoweltListing(ad_id="iw3", url="https://immowelt.test/3", title="Ohne Preis",
+                               kaltmiete=None, wohnflaeche=50.0)
+    _patch_immowelt_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immowelt(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+
+
+async def test_immowelt_ids_do_not_collide_with_kleinanzeigen_ids(monkeypatch, conn, http_client):
+    # Kleinanzeigen мог уже видеть числовой id "1" - у Immowelt он хранится
+    # с префиксом "iw:", поэтому не должен считаться уже просмотренным.
+    storage.mark_seen(conn, "1", CITY.name, False, "Kleinanzeigen-Anzeige", None, None, None)
+    listing = ImmoweltListing(ad_id="1", url="https://immowelt.test/4", title="Immowelt mit gleicher ID",
+                               kaltmiete=500.0, wohnflaeche=50.0)
+    _patch_immowelt_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immowelt(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1

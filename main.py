@@ -7,7 +7,7 @@ import storage
 from errors import is_transient
 from logger import setup_logger
 from models import City
-from tracker import check_city
+from tracker import check_city, check_city_immowelt
 
 
 async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:
@@ -22,6 +22,17 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> Non
         else:
             logger.error(f"[{city.name}] неожиданная ошибка проверки", exc_info=True)
 
+    try:
+        await check_city_immowelt(
+            client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+            config.BOT_TOKEN, config.CHAT_ID,
+        )
+    except Exception as exc:
+        if is_transient(exc):
+            logger.warning(f"[Immowelt/{city.name}] временная ошибка сети, попробуем на следующем цикле: {exc}")
+        else:
+            logger.error(f"[Immowelt/{city.name}] неожиданная ошибка проверки", exc_info=True)
+
 
 async def main() -> None:
     logger = setup_logger(config.LOG_PATH, config.LOG_RETENTION_DAYS)
@@ -30,7 +41,7 @@ async def main() -> None:
     conn = storage.connect(config.DB_PATH)
     headers = {"User-Agent": config.HTTP_USER_AGENT, "Accept-Language": "de-DE,de;q=0.9"}
 
-    async with httpx.AsyncClient(headers=headers, timeout=20) as client:
+    async with httpx.AsyncClient(headers=headers, timeout=20, follow_redirects=True) as client:
         while True:
             for city in config.CITIES:
                 await _check_one(client, conn, city, logger)

@@ -35,12 +35,23 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City) -> None:
         else:
             logger.error(f"[{city.name}] неожиданная ошибка проверки", exc_info=True)
 
+    try:
+        await tracker.check_city_immowelt(
+            client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+            config.BOT_TOKEN, config.CHAT_ID,
+        )
+    except Exception as exc:
+        if is_transient(exc):
+            logger.warning(f"[Immowelt/{city.name}] временная ошибка сети: {exc}")
+        else:
+            logger.error(f"[Immowelt/{city.name}] неожиданная ошибка проверки", exc_info=True)
+
 
 async def main() -> None:
     conn = storage_json.connect(CLOUD_STATE_PATH)
     headers = {"User-Agent": config.HTTP_USER_AGENT, "Accept-Language": "de-DE,de;q=0.9"}
 
-    async with httpx.AsyncClient(headers=headers, timeout=20) as client:
+    async with httpx.AsyncClient(headers=headers, timeout=20, follow_redirects=True) as client:
         for city in config.CITIES:
             logger.info(f"Проверяю {city.name}...")
             await _check_one(client, conn, city)
