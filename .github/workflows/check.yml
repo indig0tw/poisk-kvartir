@@ -1,0 +1,41 @@
+name: Apartment finder
+
+on:
+  schedule:
+    # Раз в 15 минут - тот же интервал, что и у локального бота
+    # (POLL_INTERVAL_MINUTES). GitHub может задерживать запуск на несколько
+    # минут при высокой нагрузке - это нормально для scheduled workflow.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - run: python run_once.py
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+
+      # cloud_seen.json - список уже просмотренных объявлений. GitHub
+      # Actions не даёт постоянного диска между запусками, поэтому файл
+      # коммитится обратно в репозиторий - иначе бот терял бы память о
+      # том, что уже отправлял, и слал одно и то же объявление заново.
+      - name: Save seen listings state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cloud_seen.json
+          git diff --cached --quiet || git commit -m "Обновить список просмотренных объявлений"
+          git push
