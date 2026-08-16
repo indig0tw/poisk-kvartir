@@ -10,11 +10,23 @@ from models import City
 from tracker import check_city, check_city_immowelt
 
 
+# Жёсткий потолок на одну проверку город+источник. httpx timeout=20 на
+# клиенте в теории должен ограничивать каждый запрос сам по себе, но на
+# практике словили реальное зависание без единой ошибки на несколько часов
+# (похоже на подвисшее DNS-разрешение в Windows, которое не всегда уважает
+# таймаут httpx) - этот wait_for снаружи гарантирует, что цикл не встанет
+# намертво, даже если внутренний таймаут почему-то не сработал.
+_CHECK_TIMEOUT_SECONDS = 60
+
+
 async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:
     try:
-        await check_city(
-            client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
-            config.MAX_LISTINGS_PER_CITY, config.SEARCH_RADIUS_KM, config.BOT_TOKEN, config.CHAT_ID,
+        await asyncio.wait_for(
+            check_city(
+                client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
+                config.MAX_LISTINGS_PER_CITY, config.SEARCH_RADIUS_KM, config.BOT_TOKEN, config.CHAT_ID,
+            ),
+            timeout=_CHECK_TIMEOUT_SECONDS,
         )
     except Exception as exc:
         if is_transient(exc):
@@ -23,9 +35,12 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> Non
             logger.error(f"[{city.name}] неожиданная ошибка проверки", exc_info=True)
 
     try:
-        await check_city_immowelt(
-            client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-            config.BOT_TOKEN, config.CHAT_ID,
+        await asyncio.wait_for(
+            check_city_immowelt(
+                client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+                config.BOT_TOKEN, config.CHAT_ID,
+            ),
+            timeout=_CHECK_TIMEOUT_SECONDS,
         )
     except Exception as exc:
         if is_transient(exc):
