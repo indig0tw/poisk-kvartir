@@ -21,6 +21,7 @@ CITIES = [
     City("Köln", "Köln", 677.00),
     City("Düsseldorf", "Düsseldorf", 565.00),
     City("Essen", "Essen", 482.50),
+    City("Oberhausen", "Oberhausen", 433.50),
     City("Hilden", "Hilden", 551.50),
     City("Münster", "Münster", 594.00),
 ]

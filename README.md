@@ -40,6 +40,7 @@ Essen, Hilden, Münster) и шлёт в Telegram новые объявления
 | Köln | 677,00 | 01.01.2025 | [Richtlinie 50 01 035a, Stadt Köln](https://www.wiku-koeln.de/) |
 | Düsseldorf | 565,00 | 01.07.2026 | [Jobcenter Düsseldorf](https://www.jobcenter-duesseldorf.de/finanzen/rund-ums-wohnen/geld-fuer-wohnung-und-heizung/) |
 | Essen | 482,50 | 01.04.2026 | [essen.de, Pressemeldung](https://www.essen.de/meldungen/pressemeldung_1590039.de.html) |
+| Oberhausen | 433,50 (316,50 Grundmiete + 117,00 Betriebskosten) | 01.01.2025 | [Jobcenter Oberhausen, обзор Bürgergeld-Anwalt](https://mein-hartz4-anwalt.de/miete-jobcenter-oberhausen/) |
 | Hilden (Kreis Mettmann) | 551,50 | 01.04.2026 | [Angemessenheitsrichtwerte, jobcenter ME-aktiv](https://www.jobcenter-me-aktiv.de/) |
 | Münster | 594,00 | 01.09.2025 | [Stadt Münster, Jobcenter](https://www.stadt-muenster.de/jobcenter/leistungen-lebensunterhalt/kosten-unterkunft) |
 
