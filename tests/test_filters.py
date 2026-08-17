@@ -17,6 +17,11 @@ def test_zwischenmiete_title_is_excluded():
     assert filters.is_title_excluded("Gemütliche Altbauwohnung zur Zwischenmiete") is True
 
 
+def test_zwischen_miete_with_space_is_also_excluded():
+    # Реальный пример с WG-Gesucht - написано раздельно, не слитно.
+    assert filters.is_title_excluded("Zwischen Miete September's 7th - flexible") is True
+
+
 def test_seeking_title_with_sucht_is_excluded():
     # "sucht" - это встречный поиск ("ищу квартиру"), не предложение аренды.
     assert filters.is_title_excluded("Ruhiges Rentnerehepaar sucht schöne Wohnung") is True

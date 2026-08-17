@@ -7,10 +7,7 @@ import re
 # ценник совсем другой природы (не помесячная Kaltmiete), для долгосрочной
 # аренды не годится (реальный пример: "Ferien-Monteur - Wohnung" за 30 €
 # оказался посуточной ценой, а не месячной Kaltmiete).
-# Zwischenmiete - временная субаренда на несколько недель/месяцев с чётким
-# сроком окончания, не долгосрочная аренда, которую ищет пользователь
-# (реальный пример: 2 из 5 объявлений на WG-Gesucht оказались такими).
-_EXCLUDED_TITLE_KEYWORDS = ("tausch", "monteur", "zwischenmiete")
+_EXCLUDED_TITLE_KEYWORDS = ("tausch", "monteur")
 
 # "sucht" (не "gesucht"!) в начале заголовка - типичная формулировка
 # объявления "ищу квартиру" (например "Rentnerehepaar sucht schöne
@@ -18,6 +15,12 @@ _EXCLUDED_TITLE_KEYWORDS = ("tausch", "monteur", "zwischenmiete")
 # трогаем - это распространённая легитимная формулировка предложений вроде
 # "Nachmieter gesucht" ("ищем нового жильца" = это предложение сдать).
 _SEEKING_TITLE_RE = re.compile(r"\bsucht\b", re.IGNORECASE)
+
+# Zwischenmiete - временная субаренда на несколько недель/месяцев с чётким
+# сроком окончания, не долгосрочная аренда, которую ищет пользователь
+# (реальные примеры: и слитно "Zwischenmiete", и раздельно "Zwischen
+# Miete" - оба варианта встречаются на WG-Gesucht).
+_ZWISCHENMIETE_RE = re.compile(r"zwischen\s*miete", re.IGNORECASE)
 
 # Некоторые арендодатели прямо пишут в описании, что не готовы сдавать
 # получателям Bürgergeld/социальных выплат - подходящих по цене и площади
@@ -35,6 +38,8 @@ _NEGATION_WINDOW_CHARS = 25
 def is_title_excluded(title: str) -> bool:
     lowered = title.lower()
     if any(keyword in lowered for keyword in _EXCLUDED_TITLE_KEYWORDS):
+        return True
+    if _ZWISCHENMIETE_RE.search(title):
         return True
     return bool(_SEEKING_TITLE_RE.search(title))
 
