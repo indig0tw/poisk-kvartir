@@ -23,6 +23,7 @@ class AdDetails:
     kaltmiete: float | None
     kaltmiete_note: str
     wohnflaeche: float | None
+    description: str
 
 
 def build_search_url(city: City, max_price: int, radius_km: int) -> str:
@@ -116,9 +117,18 @@ def parse_wohnflaeche(fields: dict[str, str]) -> float | None:
     return None
 
 
+def parse_description(html: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+    tag = soup.select_one('p[itemprop="description"]')
+    return tag.get_text(strip=True) if tag else ""
+
+
 async def fetch_ad_details(client: httpx.AsyncClient, url: str) -> AdDetails:
     response = await client.get(url)
     response.raise_for_status()
     fields = parse_detail_fields(response.text)
     kaltmiete, note = compute_kaltmiete(fields)
-    return AdDetails(kaltmiete=kaltmiete, kaltmiete_note=note, wohnflaeche=parse_wohnflaeche(fields))
+    return AdDetails(
+        kaltmiete=kaltmiete, kaltmiete_note=note, wohnflaeche=parse_wohnflaeche(fields),
+        description=parse_description(response.text),
+    )

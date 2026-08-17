@@ -23,28 +23,31 @@ logger = logging.getLogger("apartment_finder")
 CLOUD_STATE_PATH = "cloud_seen.json"
 
 
-async def _check_one(client: httpx.AsyncClient, conn, city: City) -> None:
+async def _run_check(label: str, coro) -> None:
     try:
-        await tracker.check_city(
-            client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
-            config.MAX_LISTINGS_PER_CITY, config.SEARCH_RADIUS_KM, config.BOT_TOKEN, config.CHAT_ID,
-        )
+        await coro
     except Exception as exc:
         if is_transient(exc):
-            logger.warning(f"[{city.name}] временная ошибка сети: {exc}")
+            logger.warning(f"[{label}] временная ошибка сети: {exc}")
         else:
-            logger.error(f"[{city.name}] неожиданная ошибка проверки", exc_info=True)
+            logger.error(f"[{label}] неожиданная ошибка проверки", exc_info=True)
 
-    try:
-        await tracker.check_city_immowelt(
-            client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-            config.BOT_TOKEN, config.CHAT_ID,
-        )
-    except Exception as exc:
-        if is_transient(exc):
-            logger.warning(f"[Immowelt/{city.name}] временная ошибка сети: {exc}")
-        else:
-            logger.error(f"[Immowelt/{city.name}] неожиданная ошибка проверки", exc_info=True)
+
+async def _check_one(client: httpx.AsyncClient, conn, city: City) -> None:
+    await _run_check(city.name, tracker.check_city(
+        client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
+        config.MAX_LISTINGS_PER_CITY, config.SEARCH_RADIUS_KM, config.BOT_TOKEN, config.CHAT_ID,
+    ))
+
+    await _run_check(f"Immowelt/{city.name}", tracker.check_city_immowelt(
+        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+        config.BOT_TOKEN, config.CHAT_ID,
+    ))
+
+    await _run_check(f"Quoka/{city.name}", tracker.check_city_quoka(
+        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+        config.BOT_TOKEN, config.CHAT_ID,
+    ))
 
 
 async def main() -> None:

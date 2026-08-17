@@ -7,7 +7,7 @@ import storage
 from errors import is_transient
 from logger import setup_logger
 from models import City
-from tracker import check_city, check_city_immowelt
+from tracker import check_city, check_city_immowelt, check_city_quoka
 
 
 # Жёсткий потолок на одну проверку город+источник. httpx timeout=20 на
@@ -19,34 +19,31 @@ from tracker import check_city, check_city_immowelt
 _CHECK_TIMEOUT_SECONDS = 60
 
 
-async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:
+async def _run_check(label: str, coro, logger) -> None:
     try:
-        await asyncio.wait_for(
-            check_city(
-                client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
-                config.MAX_LISTINGS_PER_CITY, config.SEARCH_RADIUS_KM, config.BOT_TOKEN, config.CHAT_ID,
-            ),
-            timeout=_CHECK_TIMEOUT_SECONDS,
-        )
+        await asyncio.wait_for(coro, timeout=_CHECK_TIMEOUT_SECONDS)
     except Exception as exc:
         if is_transient(exc):
-            logger.warning(f"[{city.name}] временная ошибка сети, попробуем на следующем цикле: {exc}")
+            logger.warning(f"[{label}] временная ошибка сети, попробуем на следующем цикле: {exc}")
         else:
-            logger.error(f"[{city.name}] неожиданная ошибка проверки", exc_info=True)
+            logger.error(f"[{label}] неожиданная ошибка проверки", exc_info=True)
 
-    try:
-        await asyncio.wait_for(
-            check_city_immowelt(
-                client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-                config.BOT_TOKEN, config.CHAT_ID,
-            ),
-            timeout=_CHECK_TIMEOUT_SECONDS,
-        )
-    except Exception as exc:
-        if is_transient(exc):
-            logger.warning(f"[Immowelt/{city.name}] временная ошибка сети, попробуем на следующем цикле: {exc}")
-        else:
-            logger.error(f"[Immowelt/{city.name}] неожиданная ошибка проверки", exc_info=True)
+
+async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:
+    await _run_check(city.name, check_city(
+        client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
+        config.MAX_LISTINGS_PER_CITY, config.SEARCH_RADIUS_KM, config.BOT_TOKEN, config.CHAT_ID,
+    ), logger)
+
+    await _run_check(f"Immowelt/{city.name}", check_city_immowelt(
+        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+        config.BOT_TOKEN, config.CHAT_ID,
+    ), logger)
+
+    await _run_check(f"Quoka/{city.name}", check_city_quoka(
+        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
+        config.BOT_TOKEN, config.CHAT_ID,
+    ), logger)
 
 
 async def main() -> None:

@@ -22,7 +22,7 @@ async def test_check_city_works_with_json_storage_backend(monkeypatch, tmp_path)
         return [result]
 
     async def fake_fetch_ad_details(client, url):
-        return AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=50.0)
+        return AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=50.0, description="")
 
     sent = []
 

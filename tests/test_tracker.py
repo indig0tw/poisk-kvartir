@@ -5,6 +5,7 @@ import storage
 import tracker
 from immowelt import ImmoweltListing
 from models import City
+from quoka import QuokaListing
 from scraper import AdDetails, SearchResult
 
 CITY = City("Köln", "Köln", 677.0)
@@ -42,7 +43,7 @@ def http_client():
 async def test_matching_ad_triggers_notification_and_is_marked_seen(monkeypatch, conn, http_client):
     result = SearchResult(ad_id="1", url="https://example.test/1", title="Schöne Wohnung")
     _patch_search(monkeypatch, [result])
-    _patch_details(monkeypatch, {result.url: AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=50.0)})
+    _patch_details(monkeypatch, {result.url: AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=50.0, description="")})
     sent = _patch_notifier(monkeypatch)
 
     await tracker.check_city(http_client, conn, CITY, 1.3, 55.0, 10, 0, "token", "chat")
@@ -55,7 +56,7 @@ async def test_matching_ad_triggers_notification_and_is_marked_seen(monkeypatch,
 async def test_ad_above_price_cap_is_not_notified_but_is_marked_seen(monkeypatch, conn, http_client):
     result = SearchResult(ad_id="2", url="https://example.test/2", title="Teure Wohnung")
     _patch_search(monkeypatch, [result])
-    _patch_details(monkeypatch, {result.url: AdDetails(kaltmiete=900.0, kaltmiete_note="", wohnflaeche=50.0)})
+    _patch_details(monkeypatch, {result.url: AdDetails(kaltmiete=900.0, kaltmiete_note="", wohnflaeche=50.0, description="")})
     sent = _patch_notifier(monkeypatch)
 
     await tracker.check_city(http_client, conn, CITY, 1.3, 55.0, 10, 0, "token", "chat")
@@ -67,7 +68,7 @@ async def test_ad_above_price_cap_is_not_notified_but_is_marked_seen(monkeypatch
 async def test_ad_above_size_cap_is_not_notified(monkeypatch, conn, http_client):
     result = SearchResult(ad_id="3", url="https://example.test/3", title="Große Wohnung")
     _patch_search(monkeypatch, [result])
-    _patch_details(monkeypatch, {result.url: AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=60.0)})
+    _patch_details(monkeypatch, {result.url: AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=60.0, description="")})
     sent = _patch_notifier(monkeypatch)
 
     await tracker.check_city(http_client, conn, CITY, 1.3, 55.0, 10, 0, "token", "chat")
@@ -79,7 +80,8 @@ async def test_ad_with_unknown_kaltmiete_is_not_notified_but_is_marked_seen(monk
     result = SearchResult(ad_id="4", url="https://example.test/4", title="WG Zimmer")
     _patch_search(monkeypatch, [result])
     _patch_details(monkeypatch, {
-        result.url: AdDetails(kaltmiete=None, kaltmiete_note="в объявлении только Warmmiete", wohnflaeche=20.0),
+        result.url: AdDetails(kaltmiete=None, kaltmiete_note="в объявлении только Warmmiete", wohnflaeche=20.0,
+                               description=""),
     })
     sent = _patch_notifier(monkeypatch)
 
@@ -189,3 +191,76 @@ async def test_tauschwohnung_is_excluded_on_immowelt(monkeypatch, conn, http_cli
 
     assert sent == []
     assert storage.is_seen(conn, "iw:iw5") is True
+
+
+async def test_buergergeld_excluded_ad_is_not_notified_on_kleinanzeigen(monkeypatch, conn, http_client):
+    result = SearchResult(ad_id="7", url="https://example.test/7", title="Günstige Wohnung")
+    _patch_search(monkeypatch, [result])
+    _patch_details(monkeypatch, {
+        result.url: AdDetails(kaltmiete=400.0, kaltmiete_note="", wohnflaeche=50.0,
+                               description="Bürgergeldempfänger nicht gewünscht!"),
+    })
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city(http_client, conn, CITY, 1.3, 55.0, 10, 0, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "7") is True
+
+
+def _patch_quoka_listings(monkeypatch, listings):
+    async def fake_fetch_listings(client, url, limit):
+        return listings
+
+    monkeypatch.setattr(tracker.quoka, "fetch_listings", fake_fetch_listings)
+
+
+async def test_quoka_matching_listing_triggers_notification(monkeypatch, conn, http_client):
+    listing = QuokaListing(ad_id="q1", url="https://quoka.test/1", title="Schöne Wohnung Quoka",
+                            description="Nette Wohnung.", kaltmiete=500.0, wohnflaeche=50.0)
+    _patch_quoka_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_quoka(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1
+    assert "Schöne Wohnung Quoka" in sent[0]
+    assert storage.is_seen(conn, "q:q1") is True
+
+
+async def test_quoka_listing_above_cap_is_not_notified_but_marked_seen(monkeypatch, conn, http_client):
+    listing = QuokaListing(ad_id="q2", url="https://quoka.test/2", title="Teure Wohnung",
+                            description="Nette Wohnung.", kaltmiete=900.0, wohnflaeche=50.0)
+    _patch_quoka_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_quoka(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "q:q2") is True
+
+
+async def test_buergergeld_excluded_listing_is_not_notified_on_quoka(monkeypatch, conn, http_client):
+    listing = QuokaListing(ad_id="q3", url="https://quoka.test/3", title="Günstige Wohnung",
+                            description="Keine Transferleistungen bitte.", kaltmiete=400.0, wohnflaeche=50.0)
+    _patch_quoka_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_quoka(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "q:q3") is True
+
+
+async def test_quoka_returns_early_for_city_without_slug(monkeypatch, conn, http_client):
+    muelheim = City("Mülheim an der Ruhr", "Mülheim (Ruhr)", 440.50)
+
+    async def fail_if_called(client, url, limit):
+        raise AssertionError("fetch_listings не должен вызываться для города без слага Quoka")
+
+    monkeypatch.setattr(tracker.quoka, "fetch_listings", fail_if_called)
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_quoka(http_client, conn, muelheim, 55.0, 10, "token", "chat")
+
+    assert sent == []
