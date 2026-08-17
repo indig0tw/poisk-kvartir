@@ -44,11 +44,6 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City) -> None:
         config.BOT_TOKEN, config.CHAT_ID,
     ))
 
-    await _run_check(f"Quoka/{city.name}", tracker.check_city_quoka(
-        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-        config.BOT_TOKEN, config.CHAT_ID,
-    ))
-
 
 async def main() -> None:
     conn = storage_json.connect(CLOUD_STATE_PATH)

@@ -5,7 +5,6 @@ import storage
 import tracker
 from immowelt import ImmoweltListing
 from models import City
-from quoka import QuokaListing
 from scraper import AdDetails, SearchResult
 
 CITY = City("Köln", "Köln", 677.0)
@@ -206,61 +205,3 @@ async def test_buergergeld_excluded_ad_is_not_notified_on_kleinanzeigen(monkeypa
 
     assert sent == []
     assert storage.is_seen(conn, "7") is True
-
-
-def _patch_quoka_listings(monkeypatch, listings):
-    async def fake_fetch_listings(client, url, limit):
-        return listings
-
-    monkeypatch.setattr(tracker.quoka, "fetch_listings", fake_fetch_listings)
-
-
-async def test_quoka_matching_listing_triggers_notification(monkeypatch, conn, http_client):
-    listing = QuokaListing(ad_id="q1", url="https://quoka.test/1", title="Schöne Wohnung Quoka",
-                            description="Nette Wohnung.", kaltmiete=500.0, wohnflaeche=50.0)
-    _patch_quoka_listings(monkeypatch, [listing])
-    sent = _patch_notifier(monkeypatch)
-
-    await tracker.check_city_quoka(http_client, conn, CITY, 55.0, 10, "token", "chat")
-
-    assert len(sent) == 1
-    assert "Schöne Wohnung Quoka" in sent[0]
-    assert storage.is_seen(conn, "q:q1") is True
-
-
-async def test_quoka_listing_above_cap_is_not_notified_but_marked_seen(monkeypatch, conn, http_client):
-    listing = QuokaListing(ad_id="q2", url="https://quoka.test/2", title="Teure Wohnung",
-                            description="Nette Wohnung.", kaltmiete=900.0, wohnflaeche=50.0)
-    _patch_quoka_listings(monkeypatch, [listing])
-    sent = _patch_notifier(monkeypatch)
-
-    await tracker.check_city_quoka(http_client, conn, CITY, 55.0, 10, "token", "chat")
-
-    assert sent == []
-    assert storage.is_seen(conn, "q:q2") is True
-
-
-async def test_buergergeld_excluded_listing_is_not_notified_on_quoka(monkeypatch, conn, http_client):
-    listing = QuokaListing(ad_id="q3", url="https://quoka.test/3", title="Günstige Wohnung",
-                            description="Keine Transferleistungen bitte.", kaltmiete=400.0, wohnflaeche=50.0)
-    _patch_quoka_listings(monkeypatch, [listing])
-    sent = _patch_notifier(monkeypatch)
-
-    await tracker.check_city_quoka(http_client, conn, CITY, 55.0, 10, "token", "chat")
-
-    assert sent == []
-    assert storage.is_seen(conn, "q:q3") is True
-
-
-async def test_quoka_returns_early_for_city_without_slug(monkeypatch, conn, http_client):
-    muelheim = City("Mülheim an der Ruhr", "Mülheim (Ruhr)", 440.50)
-
-    async def fail_if_called(client, url, limit):
-        raise AssertionError("fetch_listings не должен вызываться для города без слага Quoka")
-
-    monkeypatch.setattr(tracker.quoka, "fetch_listings", fail_if_called)
-    sent = _patch_notifier(monkeypatch)
-
-    await tracker.check_city_quoka(http_client, conn, muelheim, 55.0, 10, "token", "chat")
-
-    assert sent == []

@@ -7,7 +7,7 @@ import storage
 from errors import is_transient
 from logger import setup_logger
 from models import City
-from tracker import check_city, check_city_immowelt, check_city_quoka
+from tracker import check_city, check_city_immowelt
 
 
 # Жёсткий потолок на одну проверку город+источник. httpx timeout=20 на
@@ -36,11 +36,6 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> Non
     ), logger)
 
     await _run_check(f"Immowelt/{city.name}", check_city_immowelt(
-        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-        config.BOT_TOKEN, config.CHAT_ID,
-    ), logger)
-
-    await _run_check(f"Quoka/{city.name}", check_city_quoka(
         client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
         config.BOT_TOKEN, config.CHAT_ID,
     ), logger)
