@@ -13,6 +13,10 @@ def test_monteurwohnung_title_is_excluded():
     assert filters.is_title_excluded("Ferien-Monteur - Wohnung") is True
 
 
+def test_zwischenmiete_title_is_excluded():
+    assert filters.is_title_excluded("Gemütliche Altbauwohnung zur Zwischenmiete") is True
+
+
 def test_seeking_title_with_sucht_is_excluded():
     # "sucht" - это встречный поиск ("ищу квартиру"), не предложение аренды.
     assert filters.is_title_excluded("Ruhiges Rentnerehepaar sucht schöne Wohnung") is True

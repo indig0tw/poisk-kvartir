@@ -6,6 +6,7 @@ import httpx
 import filters
 import immowelt
 import storage
+import wg_gesucht
 from models import City
 from notifier import send_message
 from scraper import build_search_url, fetch_ad_details, fetch_search_results
@@ -34,6 +35,17 @@ def _format_immowelt_message(city: City, listing: immowelt.ImmoweltListing) -> s
         f"🏠 Immowelt | {city.name} | {price_line} | {size_line}\n"
         f"Лимит по городу: {city.max_kaltmiete:.0f} €\n\n"
         f"{listing.title}\n{listing.url}"
+    )
+
+
+def _format_wg_gesucht_message(city: City, title: str, kaltmiete: float | None, kaltmiete_note: str,
+                                wohnflaeche: float | None, url: str) -> str:
+    price_line = f"{kaltmiete:.0f} € Kaltmiete" if kaltmiete is not None else f"Кальтмитте неизвестна ({kaltmiete_note})"
+    size_line = f"{wohnflaeche:.0f} м²" if wohnflaeche is not None else "площадь не указана"
+    return (
+        f"🏠 WG-Gesucht | {city.name} | {price_line} | {size_line}\n"
+        f"Лимит по городу: {city.max_kaltmiete:.0f} €\n\n"
+        f"{title}\n{url}"
     )
 
 
@@ -105,4 +117,50 @@ async def check_city_immowelt(client: httpx.AsyncClient, conn: sqlite3.Connectio
         storage.mark_seen(
             conn, seen_id, city.name, matched, listing.title,
             listing.kaltmiete, listing.wohnflaeche, listing.url,
+        )
+
+
+async def check_city_wg_gesucht(client: httpx.AsyncClient, conn: sqlite3.Connection, city: City,
+                                 max_wohnflaeche_qm: float, max_listings: int,
+                                 bot_token: str, chat_id: str) -> None:
+    search_url = wg_gesucht.build_search_url(city.name)
+    if search_url is None:
+        return
+
+    results = await wg_gesucht.fetch_search_results(client, search_url, max_listings)
+
+    for result in results:
+        # Префикс "wgg:" - по той же причине, что и "iw:" у Immowelt: id у
+        # WG-Gesucht - число, но своя нумерация, не должно пересечься с
+        # чужими id в общей таблице просмотренных.
+        seen_id = f"wgg:{result.ad_id}"
+        if storage.is_seen(conn, seen_id):
+            continue
+
+        if filters.is_title_excluded(result.title):
+            storage.mark_seen(conn, seen_id, city.name, False, result.title, None, None, result.url)
+            continue
+
+        details = await wg_gesucht.fetch_ad_details(client, result.url)
+
+        if filters.is_buergergeld_excluded(details.description):
+            storage.mark_seen(conn, seen_id, city.name, False, result.title, None, None, result.url)
+            continue
+
+        size_ok = details.wohnflaeche is None or details.wohnflaeche <= max_wohnflaeche_qm
+        price_ok = details.kaltmiete is not None and details.kaltmiete <= city.max_kaltmiete
+        matched = price_ok and size_ok
+
+        if matched:
+            text = _format_wg_gesucht_message(
+                city, result.title, details.kaltmiete, details.kaltmiete_note,
+                details.wohnflaeche, result.url,
+            )
+            await send_message(bot_token, chat_id, text)
+            logger.info(f"[WG-Gesucht/{city.name}] найдено подходящее объявление: {result.title} "
+                        f"({details.kaltmiete} €, {details.wohnflaeche} м²) - {result.url}")
+
+        storage.mark_seen(
+            conn, seen_id, city.name, matched, result.title,
+            details.kaltmiete, details.wohnflaeche, result.url,
         )

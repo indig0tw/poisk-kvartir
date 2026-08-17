@@ -3,6 +3,7 @@ import pytest
 
 import storage
 import tracker
+import wg_gesucht
 from immowelt import ImmoweltListing
 from models import City
 from scraper import AdDetails, SearchResult
@@ -205,3 +206,89 @@ async def test_buergergeld_excluded_ad_is_not_notified_on_kleinanzeigen(monkeypa
 
     assert sent == []
     assert storage.is_seen(conn, "7") is True
+
+
+def _patch_wg_gesucht_search(monkeypatch, results):
+    async def fake_fetch_search_results(client, url, limit):
+        return results
+
+    monkeypatch.setattr(tracker.wg_gesucht, "fetch_search_results", fake_fetch_search_results)
+
+
+def _patch_wg_gesucht_details(monkeypatch, details_by_id):
+    async def fake_fetch_ad_details(client, url):
+        return details_by_id[url]
+
+    monkeypatch.setattr(tracker.wg_gesucht, "fetch_ad_details", fake_fetch_ad_details)
+
+
+async def test_wg_gesucht_matching_listing_triggers_notification(monkeypatch, conn, http_client):
+    result = wg_gesucht.SearchResult(ad_id="wg1", url="https://wg-gesucht.test/1", title="Schöne Wohnung WG-Gesucht")
+    _patch_wg_gesucht_search(monkeypatch, [result])
+    _patch_wg_gesucht_details(monkeypatch, {
+        result.url: wg_gesucht.AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=50.0, description=""),
+    })
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_wg_gesucht(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1
+    assert "Schöne Wohnung WG-Gesucht" in sent[0]
+    assert storage.is_seen(conn, "wgg:wg1") is True
+
+
+async def test_wg_gesucht_listing_above_cap_is_not_notified_but_marked_seen(monkeypatch, conn, http_client):
+    result = wg_gesucht.SearchResult(ad_id="wg2", url="https://wg-gesucht.test/2", title="Teure Wohnung")
+    _patch_wg_gesucht_search(monkeypatch, [result])
+    _patch_wg_gesucht_details(monkeypatch, {
+        result.url: wg_gesucht.AdDetails(kaltmiete=900.0, kaltmiete_note="", wohnflaeche=50.0, description=""),
+    })
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_wg_gesucht(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "wgg:wg2") is True
+
+
+async def test_buergergeld_excluded_ad_is_not_notified_on_wg_gesucht(monkeypatch, conn, http_client):
+    result = wg_gesucht.SearchResult(ad_id="wg3", url="https://wg-gesucht.test/3", title="Günstige Wohnung")
+    _patch_wg_gesucht_search(monkeypatch, [result])
+    _patch_wg_gesucht_details(monkeypatch, {
+        result.url: wg_gesucht.AdDetails(kaltmiete=400.0, kaltmiete_note="", wohnflaeche=50.0,
+                                          description="Kein Bürgergeld bitte."),
+    })
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_wg_gesucht(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "wgg:wg3") is True
+
+
+async def test_wg_gesucht_returns_early_for_city_without_id(monkeypatch, conn, http_client):
+    unknown_city = City("Berlin", "Berlin", 700.0)
+
+    async def fail_if_called(client, url, limit):
+        raise AssertionError("fetch_search_results не должен вызываться для города без city_id")
+
+    monkeypatch.setattr(tracker.wg_gesucht, "fetch_search_results", fail_if_called)
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_wg_gesucht(http_client, conn, unknown_city, 55.0, 10, "token", "chat")
+
+    assert sent == []
+
+
+async def test_wg_gesucht_ids_do_not_collide_with_kleinanzeigen_ids(monkeypatch, conn, http_client):
+    storage.mark_seen(conn, "1", CITY.name, False, "Kleinanzeigen-Anzeige", None, None, None)
+    result = wg_gesucht.SearchResult(ad_id="1", url="https://wg-gesucht.test/4", title="WG-Gesucht mit gleicher ID")
+    _patch_wg_gesucht_search(monkeypatch, [result])
+    _patch_wg_gesucht_details(monkeypatch, {
+        result.url: wg_gesucht.AdDetails(kaltmiete=500.0, kaltmiete_note="", wohnflaeche=50.0, description=""),
+    })
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_wg_gesucht(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1

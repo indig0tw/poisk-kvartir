@@ -7,7 +7,10 @@ import re
 # ценник совсем другой природы (не помесячная Kaltmiete), для долгосрочной
 # аренды не годится (реальный пример: "Ferien-Monteur - Wohnung" за 30 €
 # оказался посуточной ценой, а не месячной Kaltmiete).
-_EXCLUDED_TITLE_KEYWORDS = ("tausch", "monteur")
+# Zwischenmiete - временная субаренда на несколько недель/месяцев с чётким
+# сроком окончания, не долгосрочная аренда, которую ищет пользователь
+# (реальный пример: 2 из 5 объявлений на WG-Gesucht оказались такими).
+_EXCLUDED_TITLE_KEYWORDS = ("tausch", "monteur", "zwischenmiete")
 
 # "sucht" (не "gesucht"!) в начале заголовка - типичная формулировка
 # объявления "ищу квартиру" (например "Rentnerehepaar sucht schöne
