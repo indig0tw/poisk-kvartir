@@ -4,6 +4,7 @@ import sqlite3
 import httpx
 
 import filters
+import immoportal
 import immowelt
 import storage
 import wg_gesucht
@@ -46,6 +47,16 @@ def _format_wg_gesucht_message(city: City, title: str, kaltmiete: float | None, 
         f"🏠 WG-Gesucht | {city.name} | {price_line} | {size_line}\n"
         f"Лимит по городу: {city.max_kaltmiete:.0f} €\n\n"
         f"{title}\n{url}"
+    )
+
+
+def _format_immoportal_message(city: City, listing: immoportal.Listing) -> str:
+    price_line = f"{listing.kaltmiete:.0f} € Kaltmiete" if listing.kaltmiete is not None else "цена не распознана"
+    size_line = f"{listing.wohnflaeche:.0f} м²" if listing.wohnflaeche is not None else "площадь не указана"
+    return (
+        f"🏠 Immoportal | {city.name} | {price_line} | {size_line}\n"
+        f"Лимит по городу: {city.max_kaltmiete:.0f} €\n\n"
+        f"{listing.title}\n{listing.url}"
     )
 
 
@@ -163,4 +174,39 @@ async def check_city_wg_gesucht(client: httpx.AsyncClient, conn: sqlite3.Connect
         storage.mark_seen(
             conn, seen_id, city.name, matched, result.title,
             details.kaltmiete, details.wohnflaeche, result.url,
+        )
+
+
+async def check_city_immoportal(client: httpx.AsyncClient, conn: sqlite3.Connection, city: City,
+                                 max_wohnflaeche_qm: float, max_listings: int,
+                                 bot_token: str, chat_id: str) -> None:
+    search_url = immoportal.build_search_url(city.name)
+    if search_url is None:
+        return
+
+    listings = await immoportal.fetch_listings(client, search_url, max_listings)
+
+    for listing in listings:
+        # Префикс "ip:" - по той же причине, что и у остальных источников:
+        # id у Immoportal - число, но своя нумерация.
+        seen_id = f"ip:{listing.ad_id}"
+        if storage.is_seen(conn, seen_id):
+            continue
+
+        if filters.is_title_excluded(listing.title):
+            storage.mark_seen(conn, seen_id, city.name, False, listing.title, None, None, listing.url)
+            continue
+
+        size_ok = listing.wohnflaeche is None or listing.wohnflaeche <= max_wohnflaeche_qm
+        price_ok = listing.kaltmiete is not None and listing.kaltmiete <= city.max_kaltmiete
+        matched = price_ok and size_ok
+
+        if matched:
+            text = _format_immoportal_message(city, listing)
+            await send_message(bot_token, chat_id, text)
+            logger.info(f"[Immoportal/{city.name}] найдено подходящее объявление: {listing.title} - {listing.url}")
+
+        storage.mark_seen(
+            conn, seen_id, city.name, matched, listing.title,
+            listing.kaltmiete, listing.wohnflaeche, listing.url,
         )

@@ -4,6 +4,7 @@ import pytest
 import storage
 import tracker
 import wg_gesucht
+from immoportal import Listing as ImmoportalListing
 from immowelt import ImmoweltListing
 from models import City
 from scraper import AdDetails, SearchResult
@@ -290,5 +291,75 @@ async def test_wg_gesucht_ids_do_not_collide_with_kleinanzeigen_ids(monkeypatch,
     sent = _patch_notifier(monkeypatch)
 
     await tracker.check_city_wg_gesucht(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1
+
+
+def _patch_immoportal_listings(monkeypatch, listings):
+    async def fake_fetch_listings(client, url, limit):
+        return listings
+
+    monkeypatch.setattr(tracker.immoportal, "fetch_listings", fake_fetch_listings)
+
+
+async def test_immoportal_matching_listing_triggers_notification(monkeypatch, conn, http_client):
+    listing = ImmoportalListing(ad_id="ip1", url="https://immoportal.test/1", title="Schöne Wohnung Immoportal",
+                                 kaltmiete=500.0, wohnflaeche=50.0)
+    _patch_immoportal_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immoportal(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert len(sent) == 1
+    assert "Schöne Wohnung Immoportal" in sent[0]
+    assert storage.is_seen(conn, "ip:ip1") is True
+
+
+async def test_immoportal_listing_above_cap_is_not_notified_but_marked_seen(monkeypatch, conn, http_client):
+    listing = ImmoportalListing(ad_id="ip2", url="https://immoportal.test/2", title="Teure Wohnung",
+                                 kaltmiete=900.0, wohnflaeche=50.0)
+    _patch_immoportal_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immoportal(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "ip:ip2") is True
+
+
+async def test_tauschwohnung_is_excluded_on_immoportal(monkeypatch, conn, http_client):
+    listing = ImmoportalListing(ad_id="ip3", url="https://immoportal.test/3", title="Tauschwohnung gesucht",
+                                 kaltmiete=400.0, wohnflaeche=50.0)
+    _patch_immoportal_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immoportal(http_client, conn, CITY, 55.0, 10, "token", "chat")
+
+    assert sent == []
+    assert storage.is_seen(conn, "ip:ip3") is True
+
+
+async def test_immoportal_returns_early_for_city_without_slug(monkeypatch, conn, http_client):
+    unknown_city = City("Berlin", "Berlin", 700.0)
+
+    async def fail_if_called(client, url, limit):
+        raise AssertionError("fetch_listings не должен вызываться для города без слага Immoportal")
+
+    monkeypatch.setattr(tracker.immoportal, "fetch_listings", fail_if_called)
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immoportal(http_client, conn, unknown_city, 55.0, 10, "token", "chat")
+
+    assert sent == []
+
+
+async def test_immoportal_ids_do_not_collide_with_kleinanzeigen_ids(monkeypatch, conn, http_client):
+    storage.mark_seen(conn, "1", CITY.name, False, "Kleinanzeigen-Anzeige", None, None, None)
+    listing = ImmoportalListing(ad_id="1", url="https://immoportal.test/4", title="Immoportal mit gleicher ID",
+                                 kaltmiete=500.0, wohnflaeche=50.0)
+    _patch_immoportal_listings(monkeypatch, [listing])
+    sent = _patch_notifier(monkeypatch)
+
+    await tracker.check_city_immoportal(http_client, conn, CITY, 55.0, 10, "token", "chat")
 
     assert len(sent) == 1
