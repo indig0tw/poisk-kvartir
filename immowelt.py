@@ -19,6 +19,8 @@ SLUGS = {
     "Oberhausen": "oberhausen",
     "Hilden": "hilden",
     "Münster": "muenster",
+    "Wuppertal": "wuppertal",
+    "Solingen": "solingen",
 }
 
 # Immowelt не отдаёт цену/площадь через отдельные HTML-поля в выдаче поиска -

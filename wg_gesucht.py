@@ -19,6 +19,8 @@ CITY_IDS = {
     "Oberhausen": 97,
     "Hilden": 2797,
     "Münster": 91,
+    "Wuppertal": 142,
+    "Solingen": 121,
 }
 
 # ".2." в пути - категория "Wohnungen" (целые квартиры), а не "WG-Zimmer"

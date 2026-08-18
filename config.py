@@ -24,6 +24,8 @@ CITIES = [
     City("Oberhausen", "Oberhausen", 433.50),
     City("Hilden", "Hilden", 551.50),
     City("Münster", "Münster", 594.00),
+    City("Wuppertal", "Wuppertal", 466.00),
+    City("Solingen", "Solingen", 510.00),
 ]
 
 # Жёсткий потолок площади (м²) - выше не показываем, даже если цена
