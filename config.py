@@ -42,6 +42,12 @@ SEARCH_PRICE_BUFFER = float(os.environ.get("SEARCH_PRICE_BUFFER", "1.3"))
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
+# GitHub PAT (repo) для синхронизации "уже видел" между локальным ботом и
+# облачным workflow через commit/push в cloud_seen.json - без него оба
+# работают независимо и могут задублировать уведомление об одном и том же
+# объявлении. Необязателен: если не задан, синхронизация просто выключена.
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+
 POLL_INTERVAL_MINUTES = float(os.environ.get("POLL_INTERVAL_MINUTES", "15"))
 # Сколько объявлений с первой страницы поиска рассматривать за один цикл на
 # город. Первая страница отсортирована по дате (новые сверху), этого с

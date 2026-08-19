@@ -36,3 +36,25 @@ def mark_seen(conn: sqlite3.Connection, ad_id: str, city: str, matched: bool, ti
          wohnflaeche, url),
     )
     conn.commit()
+
+
+def get_all_ids(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT ad_id FROM seen_listings").fetchall()
+    return {row[0] for row in rows}
+
+
+def mark_seen_bulk(conn: sqlite3.Connection, ad_ids: set[str]) -> None:
+    """Импорт id, уже отмеченных как просмотренные где-то ещё (облачным
+    прогоном через sync.py) - без цены/площади/города, они тут не нужны,
+    важно только чтобы is_seen() возвращал True и локальный бот не слал
+    повторное уведомление по тому же объявлению."""
+    if not ad_ids:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    conn.executemany(
+        """INSERT OR IGNORE INTO seen_listings
+           (ad_id, ts, city, matched, title, kaltmiete, wohnflaeche, url)
+           VALUES (?, ?, '', 0, NULL, NULL, NULL, NULL)""",
+        [(ad_id, now) for ad_id in ad_ids],
+    )
+    conn.commit()

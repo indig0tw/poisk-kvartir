@@ -4,6 +4,7 @@ import httpx
 
 import config
 import storage
+import sync
 from errors import is_transient
 from logger import setup_logger
 from models import City
@@ -60,8 +61,24 @@ async def main() -> None:
 
     async with httpx.AsyncClient(headers=headers, timeout=20, follow_redirects=True) as client:
         while True:
+            cloud_ids: set[str] = set()
+            if config.GITHUB_TOKEN:
+                try:
+                    cloud_ids = await asyncio.to_thread(sync.pull_cloud_ids, config.GITHUB_TOKEN)
+                    storage.mark_seen_bulk(conn, cloud_ids - storage.get_all_ids(conn))
+                except Exception:
+                    logger.error("[sync] не удалось подтянуть cloud_seen.json", exc_info=True)
+
             for city in config.CITIES:
                 await _check_one(client, conn, city, logger)
+
+            if config.GITHUB_TOKEN:
+                try:
+                    new_ids = storage.get_all_ids(conn) - cloud_ids
+                    await asyncio.to_thread(sync.push_new_ids, new_ids, config.GITHUB_TOKEN)
+                except Exception:
+                    logger.error("[sync] не удалось отправить новые id в cloud_seen.json", exc_info=True)
+
             await asyncio.sleep(config.POLL_INTERVAL_MINUTES * 60)
 
 
