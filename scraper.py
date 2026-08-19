@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import dataclass
 from urllib.parse import quote, urljoin
@@ -56,17 +57,39 @@ def _parse_qm(text: str) -> float | None:
         return None
 
 
+def _parse_card_title(article) -> str:
+    # Старая вёрстка (класс "aditem" на article) - заголовок в h2.
+    title_tag = article.select_one("h2 a.ellipsis")
+    if title_tag is not None:
+        return title_tag.get_text(strip=True)
+
+    # Новая вёрстка (Tailwind-классы вместо "aditem", без h2 вообще) -
+    # заголовка в HTML карточки нет, но есть JSON-LD script с полем title.
+    script_tag = article.select_one('script[type="application/ld+json"]')
+    if script_tag is not None:
+        try:
+            data = json.loads(script_tag.string or "")
+            title = data.get("title")
+            if title:
+                return title
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            pass
+    return ""
+
+
 async def fetch_search_results(client: httpx.AsyncClient, url: str, limit: int) -> list[SearchResult]:
     response = await client.get(url)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "lxml")
 
     results = []
-    for article in soup.select("article.aditem[data-adid]"):
+    # Без ".aditem" в селекторе - у части объявлений класс на article теперь
+    # Tailwind-утилиты ("flex justify-between p-medium") вместо "aditem",
+    # но data-adid/data-href остаются на месте в обоих вариантах вёрстки.
+    for article in soup.select("article[data-adid]"):
         ad_id = article["data-adid"]
         href = article.get("data-href") or ""
-        title_tag = article.select_one("h2 a.ellipsis")
-        title = title_tag.get_text(strip=True) if title_tag else ""
+        title = _parse_card_title(article)
         if not href:
             continue
         results.append(SearchResult(ad_id=ad_id, url=urljoin(BASE_URL, href), title=title))

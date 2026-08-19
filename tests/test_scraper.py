@@ -32,6 +32,22 @@ SEARCH_HTML = """
 """
 
 
+# Новая вёрстка карточки (без класса "aditem" и без h2 вообще - заголовок
+# только в JSON-LD script внутри article), увидена на реальном сайте
+# 2026-08-19: под неё все объявления, кроме первого в сессии, переставали
+# парситься (article[data-adid] всё ещё матчился бы, а вот старый селектор
+# article.aditem[data-adid] - уже нет).
+SEARCH_HTML_NEW_LAYOUT = """
+<html><body><ul>
+<li>
+<article class="flex justify-between p-medium" data-adid="333" data-href="/s-anzeige/dritte-wohnung/333-203-1">
+  <script type="application/ld+json">{"title":"Dritte Wohnung","@type":"Product"}</script>
+</article>
+</li>
+</ul></body></html>
+"""
+
+
 def _detail_html(*rows: tuple[str, str]) -> str:
     items = "".join(
         f'<li class="addetailslist--detail">{label}'
@@ -111,6 +127,20 @@ async def test_fetch_search_results_respects_limit():
         results = await fetch_search_results(client, "https://example.test/search", limit=1)
 
     assert len(results) == 1
+
+
+async def test_fetch_search_results_parses_new_layout_without_aditem_class():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=SEARCH_HTML_NEW_LAYOUT)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        results = await fetch_search_results(client, "https://example.test/search", limit=10)
+
+    assert len(results) == 1
+    assert results[0].ad_id == "333"
+    assert results[0].title == "Dritte Wohnung"
+    assert results[0].url == "https://www.kleinanzeigen.de/s-anzeige/dritte-wohnung/333-203-1"
 
 
 async def test_fetch_ad_details_combines_parsing_and_kaltmiete_calc():

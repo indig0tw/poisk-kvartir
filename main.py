@@ -64,7 +64,10 @@ async def main() -> None:
             cloud_ids: set[str] = set()
             if config.GITHUB_TOKEN:
                 try:
-                    cloud_ids = await asyncio.to_thread(sync.pull_cloud_ids, config.GITHUB_TOKEN)
+                    cloud_ids = await asyncio.wait_for(
+                        asyncio.to_thread(sync.pull_cloud_ids, config.GITHUB_TOKEN),
+                        timeout=_CHECK_TIMEOUT_SECONDS,
+                    )
                     storage.mark_seen_bulk(conn, cloud_ids - storage.get_all_ids(conn))
                 except Exception:
                     logger.error("[sync] не удалось подтянуть cloud_seen.json", exc_info=True)
@@ -75,7 +78,10 @@ async def main() -> None:
             if config.GITHUB_TOKEN:
                 try:
                     new_ids = storage.get_all_ids(conn) - cloud_ids
-                    await asyncio.to_thread(sync.push_new_ids, new_ids, config.GITHUB_TOKEN)
+                    await asyncio.wait_for(
+                        asyncio.to_thread(sync.push_new_ids, new_ids, config.GITHUB_TOKEN),
+                        timeout=_CHECK_TIMEOUT_SECONDS,
+                    )
                 except Exception:
                     logger.error("[sync] не удалось отправить новые id в cloud_seen.json", exc_info=True)
 
