@@ -49,6 +49,15 @@ _HEALTH_CHECK_SAMPLE_SIZE = 3
 # состояние остальных.
 _health_alert_active: dict[str, bool] = {}
 
+# Сколько циклов подряд источник должен вернуть 0 объявлений, прежде чем
+# слать уведомление - у WG-Gesucht на практике бывает разовая защитная
+# страница ("Überprüfung") на один цикл без всякой реальной поломки (см.
+# 2026-08-20), с одного нулевого результата такое не отличить от настоящей
+# поломки вроде смены вёрстки Kleinanzeigen 2026-08-19.
+_HEALTH_ALERT_THRESHOLD = 2
+
+_health_fail_streak: dict[str, int] = {}
+
 
 async def _kleinanzeigen_count(client: httpx.AsyncClient, city: City) -> int:
     url = build_search_url(city, int(city.max_kaltmiete * config.SEARCH_PRICE_BUFFER), config.SEARCH_RADIUS_KM)
@@ -92,20 +101,28 @@ async def _check_source_health(client: httpx.AsyncClient, logger, source: str, f
 
     was_active = _health_alert_active.get(source, False)
     if total_results == 0:
-        logger.error(
-            f"[health] {source} не вернул ни одного объявления по {_HEALTH_CHECK_SAMPLE_SIZE} "
-            f"проверочным городам - возможно, сайт снова сменил вёрстку или заблокировал бота"
+        streak = _health_fail_streak.get(source, 0) + 1
+        _health_fail_streak[source] = streak
+        logger.warning(
+            f"[health] {source} вернул 0 объявлений по {_HEALTH_CHECK_SAMPLE_SIZE} проверочным городам "
+            f"(подряд: {streak}/{_HEALTH_ALERT_THRESHOLD})"
         )
-        if not was_active:
+        if streak >= _HEALTH_ALERT_THRESHOLD and not was_active:
+            logger.error(
+                f"[health] {source} не отдаёт объявления {streak} цикла(ов) подряд - "
+                "возможно, сайт снова сменил вёрстку или заблокировал бота"
+            )
             await send_message(
                 config.BOT_TOKEN, config.CHAT_ID,
-                f"⚠️ {source} не отдаёт объявления ни по одному из проверочных городов уже целый цикл - "
+                f"⚠️ {source} не отдаёт объявления уже {streak} цикла(ов) подряд - "
                 "похоже, сайт что-то изменил или заблокировал бота. Стоит проверить.",
             )
             _health_alert_active[source] = True
-    elif was_active:
-        await send_message(config.BOT_TOKEN, config.CHAT_ID, f"✅ {source} снова отдаёт объявления, всё в порядке.")
-        _health_alert_active[source] = False
+    else:
+        _health_fail_streak[source] = 0
+        if was_active:
+            await send_message(config.BOT_TOKEN, config.CHAT_ID, f"✅ {source} снова отдаёт объявления, всё в порядке.")
+            _health_alert_active[source] = False
 
 
 async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:

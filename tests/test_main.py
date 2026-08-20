@@ -29,11 +29,31 @@ def _fake_fetch_count(counts: list[int]):
     return fetch_count
 
 
-async def test_health_check_alerts_when_all_sample_cities_empty(monkeypatch):
-    monkeypatch.setitem(main._health_alert_active, "TestSource", False)
+def _reset(monkeypatch, source: str):
+    monkeypatch.setitem(main._health_alert_active, source, False)
+    monkeypatch.setitem(main._health_fail_streak, source, 0)
+
+
+async def test_health_check_does_not_alert_on_first_failed_cycle(monkeypatch):
+    # Один цикл с нулём - это ещё может быть разовая защита сайта (как у
+    # WG-Gesucht), не повод сразу слать уведомление.
+    _reset(monkeypatch, "TestSource")
     sent = _FakeSentMessages()
     monkeypatch.setattr(main, "send_message", sent)
 
+    await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([0, 0, 0]))
+
+    assert sent == []
+    assert main._health_alert_active["TestSource"] is False
+    assert main._health_fail_streak["TestSource"] == 1
+
+
+async def test_health_check_alerts_after_threshold_consecutive_failures(monkeypatch):
+    _reset(monkeypatch, "TestSource")
+    sent = _FakeSentMessages()
+    monkeypatch.setattr(main, "send_message", sent)
+
+    await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([0, 0, 0]))
     await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([0, 0, 0]))
 
     assert len(sent) == 1
@@ -42,19 +62,24 @@ async def test_health_check_alerts_when_all_sample_cities_empty(monkeypatch):
     assert main._health_alert_active["TestSource"] is True
 
 
-async def test_health_check_does_not_alert_when_some_results_present(monkeypatch):
-    monkeypatch.setitem(main._health_alert_active, "TestSource", False)
+async def test_health_check_resets_streak_on_success_before_threshold(monkeypatch):
+    _reset(monkeypatch, "TestSource")
     sent = _FakeSentMessages()
     monkeypatch.setattr(main, "send_message", sent)
 
-    await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([0, 3, 0]))
+    await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([0, 0, 0]))
+    await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([1, 0, 0]))
+    await main._check_source_health(None, _NullLogger(), "TestSource", _fake_fetch_count([0, 0, 0]))
 
+    # Успешный цикл посреди двух неудачных должен сбросить счётчик - до
+    # порога так и не дошло, уведомления быть не должно.
     assert sent == []
-    assert main._health_alert_active["TestSource"] is False
+    assert main._health_fail_streak["TestSource"] == 1
 
 
 async def test_health_check_does_not_repeat_alert_while_still_broken(monkeypatch):
     monkeypatch.setitem(main._health_alert_active, "TestSource", True)
+    monkeypatch.setitem(main._health_fail_streak, "TestSource", 2)
     sent = _FakeSentMessages()
     monkeypatch.setattr(main, "send_message", sent)
 
@@ -66,6 +91,7 @@ async def test_health_check_does_not_repeat_alert_while_still_broken(monkeypatch
 
 async def test_health_check_sends_recovery_message_once(monkeypatch):
     monkeypatch.setitem(main._health_alert_active, "TestSource", True)
+    monkeypatch.setitem(main._health_fail_streak, "TestSource", 2)
     sent = _FakeSentMessages()
     monkeypatch.setattr(main, "send_message", sent)
 
@@ -74,17 +100,19 @@ async def test_health_check_sends_recovery_message_once(monkeypatch):
     assert len(sent) == 1
     assert "снова отдаёт" in sent[0]
     assert main._health_alert_active["TestSource"] is False
+    assert main._health_fail_streak["TestSource"] == 0
 
 
 async def test_health_check_sources_are_independent(monkeypatch):
     # Поломка одного источника не должна триггерить/маскировать уведомление
-    # по другому - у каждого свой флаг в _health_alert_active.
-    monkeypatch.setitem(main._health_alert_active, "Broken", False)
-    monkeypatch.setitem(main._health_alert_active, "Healthy", False)
+    # по другому - у каждого свой флаг и свой streak.
+    _reset(monkeypatch, "Broken")
+    _reset(monkeypatch, "Healthy")
     sent = _FakeSentMessages()
     monkeypatch.setattr(main, "send_message", sent)
 
-    await main._check_source_health(None, _NullLogger(), "Broken", _fake_fetch_count([0, 0, 0]))
+    for _ in range(2):
+        await main._check_source_health(None, _NullLogger(), "Broken", _fake_fetch_count([0, 0, 0]))
     await main._check_source_health(None, _NullLogger(), "Healthy", _fake_fetch_count([1, 2, 3]))
 
     assert len(sent) == 1
