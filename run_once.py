@@ -84,7 +84,7 @@ async def main() -> None:
     if config.GITHUB_TOKEN:
         new_ids = conn.seen_ids - initial_ids
         try:
-            await asyncio.to_thread(sync.push_new_ids, new_ids, config.GITHUB_TOKEN)
+            await asyncio.to_thread(sync.push_new_ids, new_ids, config.GITHUB_TOKEN, 3, "облачным workflow")
         except Exception:
             logger.error("[sync] не удалось отправить найденные id в cloud_seen.json", exc_info=True)
 

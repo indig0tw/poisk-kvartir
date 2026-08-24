@@ -70,7 +70,7 @@ async def test_main_pushes_only_newly_found_ids(monkeypatch, tmp_path):
 
     pushed = {}
 
-    def fake_push(new_ids, token, attempts=3):
+    def fake_push(new_ids, token, *args, **kwargs):
         pushed["new_ids"] = new_ids
         pushed["token"] = token
 
