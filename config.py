@@ -26,6 +26,8 @@ CITIES = [
     City("Münster", "Münster", 594.00),
     City("Wuppertal", "Wuppertal", 466.00),
     City("Solingen", "Solingen", 510.00),
+    City("Moers", "Moers", 460.50),
+    City("Leverkusen", "Leverkusen", 525.00),
 ]
 
 # Жёсткий потолок площади (м²) - выше не показываем, даже если цена

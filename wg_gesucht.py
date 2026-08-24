@@ -21,6 +21,8 @@ CITY_IDS = {
     "Münster": 91,
     "Wuppertal": 142,
     "Solingen": 121,
+    "Moers": 275,
+    "Leverkusen": 78,
 }
 
 # ".2." в пути - категория "Wohnungen" (целые квартиры), а не "WG-Zimmer"

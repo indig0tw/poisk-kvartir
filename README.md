@@ -2,11 +2,11 @@
 
 Следит за объявлениями об аренде квартир на [kleinanzeigen.de](https://www.kleinanzeigen.de/),
 [immowelt.de](https://www.immowelt.de/), [wg-gesucht.de](https://www.wg-gesucht.de/) и
-[immoportal.com](https://www.immoportal.com/) сразу по десяти городам NRW
-(Mülheim an der Ruhr, Neuss, Köln, Düsseldorf, Essen, Oberhausen, Hilden,
-Münster, Wuppertal, Solingen) и шлёт в Telegram новые объявления, которые
-укладываются в лимиты по цене и площади, допустимые джобцентром для одного
-человека.
+[immoportal.com](https://www.immoportal.com/) сразу по двенадцати городам
+NRW (Mülheim an der Ruhr, Neuss, Köln, Düsseldorf, Essen, Oberhausen,
+Hilden, Münster, Wuppertal, Solingen, Moers, Leverkusen) и шлёт в Telegram
+новые объявления, которые укладываются в лимиты по цене и площади,
+допустимые джобцентром для одного человека.
 
 Quoka.de пробовали подключать пятым источником, но отказались — общая
 площадка объявлений с невалидным JSON, объявления часто без фото и низкого
@@ -51,6 +51,8 @@ Quoka.de пробовали подключать пятым источником
 | Münster | 594,00 | 01.09.2025 | [Stadt Münster, Jobcenter](https://www.stadt-muenster.de/jobcenter/leistungen-lebensunterhalt/kosten-unterkunft) |
 | Wuppertal | 466,00 | 01.01.2025 | [KdU Wuppertal, Jobcenter](https://tacheles-sozialhilfe.de/aktuelles/archiv/neue-werte-fuer-unterkunft-und-heizung-in-wuppertal.html) |
 | Solingen | 510,00 (400 Grundmiete + 110 Betriebskosten) | 01.01.2025 | [KdU Solingen, Jobcenter](https://harald-thome.de/files/pdf/KdU%20New/KdU%20Solingen%20-%2001.01.2025.pdf) |
+| Moers (Kreis Wesel) | 460,50 | Май 2024 | [Mietobergrenzen in Moers](https://www.neue-grundsicherung-hilfe.de/regionales/mietobergrenzen/nordrhein-westfalen/moers) |
+| Leverkusen | 525,00 | дата не указана источником | [Mietobergrenzen in Leverkusen](https://www.neue-grundsicherung-hilfe.de/regionales/mietobergrenzen/nordrhein-westfalen/leverkusen) |
 
 Эти значения периодически пересматриваются (обычно раз в год) — если
 проходит много времени с даты выше, стоит свериться с источником и обновить
@@ -103,7 +105,7 @@ Immowelt закрывает страницу конкретного объявл
   именно Kaltmiete, но это не подтверждено на 100% для каждого объявления.
   В уведомлении об этом всегда есть пометка «не проверено индивидуально».
 - URL для фильтрации по городу — простой слаг в пути
-  (`/liste/{slug}/wohnungen/mieten`), проверен вручную для всех 10 городов на
+  (`/liste/{slug}/wohnungen/mieten`), проверен вручную для всех 12 городов на
   отсутствие путаницы с одноимёнными районами (в отличие от Kleinanzeigen,
   тут с "muelheim-an-der-ruhr" всё чисто).
 - Не нашлось рабочих query-параметров для фильтра по цене или сортировки
@@ -120,7 +122,7 @@ WG-Gesucht отдаёт и страницу поиска, и страницу к
 - Фильтрация по городу — через числовой `city_id` в пути URL
   (`/wohnungen-in-{slug}.{city_id}.2.1.0.html`, `.2.` - категория «целые
   квартиры», не WG-комнаты), проверено вручную по `<title>` страницы для
-  всех 10 городов, включая Mülheim an der Ruhr (там, где у Kleinanzeigen и
+  всех 12 городов, включая Mülheim an der Ruhr (там, где у Kleinanzeigen и
   Quoka была путаница с районами/соседними городами, тут всё чисто).
 - На странице объявления — чистая пара «Miete: 1200€» / «Nebenkosten:
   450€» (Miete = Kaltmiete, проверено: Miete + Nebenkosten совпадает с
@@ -137,7 +139,7 @@ Immowelt, где цена вообще никак не подписана (см.
 
 - Фильтрация по городу — слаг в пути URL
   (`/suche/de/nordrhein-westfalen/{slug}/wohnungen/mieten`), проверен
-  вручную по `<title>` для всех 10 городов, включая Mülheim an der Ruhr.
+  вручную по `<title>` для всех 12 городов, включая Mülheim an der Ruhr.
 - Заход на страницу объявления не требуется вообще — цена/площадь/фото
   уже есть в самой выдаче. Из-за этого (пока) нет фильтра по отказу от
   Bürgergeld для этого источника — понадобился бы отдельный поход на
@@ -198,7 +200,7 @@ python -m venv .venv
 ```
 
 Дальше бот раз в `POLL_INTERVAL_MINUTES` минут (по умолчанию 15) проверяет
-все десять городов на всех четырёх сайтах и шлёт уведомления в чат с ботом.
+все двенадцать городов на всех четырёх сайтах и шлёт уведомления в чат с ботом.
 
 Кроме локального запуска, тот же код работает в облаке через GitHub
 Actions (`.github/workflows/check.yml`, запуск `run_once.py`) — раз в 15
