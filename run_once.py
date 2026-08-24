@@ -5,17 +5,10 @@ import httpx
 
 import config
 import storage_json
+import sync
 import tracker
 from errors import is_transient
 from models import City
-
-# Подменяем storage-бэкенд tracker.py на JSON-версию: для GitHub Actions
-# (нет постоянного диска между запусками, состояние коммитится обратно в
-# репозиторий как обычный файл) вместо SQLite, которым пользуется main.py
-# при локальном непрерывном запуске. Логика проверки в tracker.check_city
-# от этого не меняется - она обращается к storage.is_seen/mark_seen как
-# к модулю-зависимости.
-tracker.storage = storage_json
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("apartment_finder")
@@ -56,7 +49,19 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City) -> None:
 
 
 async def main() -> None:
+    # Подменяем storage-бэкенд tracker.py на JSON-версию: для GitHub Actions
+    # (нет постоянного диска между запусками, состояние коммитится обратно в
+    # репозиторий как обычный файл) вместо SQLite, которым пользуется
+    # main.py при локальном непрерывном запуске. Логика проверки в
+    # tracker.check_city от этого не меняется - она обращается к
+    # storage.is_seen/mark_seen как к модулю-зависимости. Сделано внутри
+    # main(), а не на уровне модуля - иначе один только "import run_once"
+    # (например, в тестах) молча и необратимо ломал бы tracker.storage для
+    # всего процесса, включая совсем не связанные тесты SQLite-бэкенда.
+    tracker.storage = storage_json
+
     conn = storage_json.connect(CLOUD_STATE_PATH)
+    initial_ids = set(conn.seen_ids)
     headers = {"User-Agent": config.HTTP_USER_AGENT, "Accept-Language": "de-DE,de;q=0.9"}
 
     async with httpx.AsyncClient(headers=headers, timeout=20, follow_redirects=True) as client:
@@ -66,6 +71,22 @@ async def main() -> None:
 
     storage_json.save(conn)
     logger.info(f"Готово. Всего просмотрено объявлений: {len(conn.seen_ids)}")
+
+    # Отправляем найденные за этот прогон id обратно в репозиторий через
+    # GitHub Contents API (тот же безопасный sha-механизм, что и у
+    # локального бота в sync.py) - а не через git commit/push внутри
+    # workflow, как было раньше. Раньше был реальный конфликт: если
+    # локальный бот успевал запушить своё состояние через sync.py в то же
+    # время, обычный "git push" в конце workflow падал с "rejected (fetch
+    # first)" и всё, что нашёл этот прогон, терялось. Через API конфликт
+    # решается сам - сравнивается sha текущего содержимого файла, устаревший
+    # sha просто повторяется с актуальным состоянием (см. sync.push_new_ids).
+    if config.GITHUB_TOKEN:
+        new_ids = conn.seen_ids - initial_ids
+        try:
+            await asyncio.to_thread(sync.push_new_ids, new_ids, config.GITHUB_TOKEN)
+        except Exception:
+            logger.error("[sync] не удалось отправить найденные id в cloud_seen.json", exc_info=True)
 
 
 if __name__ == "__main__":

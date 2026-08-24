@@ -40,3 +40,67 @@ async def test_check_city_works_with_json_storage_backend(monkeypatch, tmp_path)
 
     assert len(sent) == 1
     assert storage_json.is_seen(conn, "1") is True
+
+
+async def test_main_pushes_only_newly_found_ids(monkeypatch, tmp_path):
+    """Раньше состояние коммитилось через git внутри workflow и падало при
+    гонке с sync.py локального бота ("rejected (fetch first)"), потому что
+    оба пишут в один и тот же cloud_seen.json. Теперь run_once.py сам
+    отправляет только вновь найденные за этот прогон id через тот же
+    safe-merge API, что и sync.py - проверяем, что в push уходит именно
+    diff, а не всё содержимое conn.seen_ids (включая то, что уже было в
+    файле до этого прогона)."""
+    import run_once
+
+    # main() сам делает "tracker.storage = storage_json" (сырое присвоение,
+    # не через monkeypatch) - без этой строки оно бы утекло в остальные
+    # тесты, которые рассчитывают на SQLite-бэкенд по умолчанию.
+    monkeypatch.setattr(tracker, "storage", storage_json)
+
+    state_path = tmp_path / "cloud_seen.json"
+    state_path.write_text('["existing"]', encoding="utf-8")
+    monkeypatch.setattr(run_once, "CLOUD_STATE_PATH", str(state_path))
+    monkeypatch.setattr(run_once.config, "GITHUB_TOKEN", "token")
+    monkeypatch.setattr(run_once.config, "CITIES", [CITY])
+
+    async def fake_check_one(client, conn, city):
+        conn.seen_ids.add("new-1")
+
+    monkeypatch.setattr(run_once, "_check_one", fake_check_one)
+
+    pushed = {}
+
+    def fake_push(new_ids, token, attempts=3):
+        pushed["new_ids"] = new_ids
+        pushed["token"] = token
+
+    monkeypatch.setattr(run_once.sync, "push_new_ids", fake_push)
+
+    await run_once.main()
+
+    assert pushed["new_ids"] == {"new-1"}
+    assert pushed["token"] == "token"
+
+
+async def test_main_skips_push_without_github_token(monkeypatch, tmp_path):
+    import run_once
+
+    monkeypatch.setattr(tracker, "storage", storage_json)
+
+    state_path = tmp_path / "cloud_seen.json"
+    state_path.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(run_once, "CLOUD_STATE_PATH", str(state_path))
+    monkeypatch.setattr(run_once.config, "GITHUB_TOKEN", None)
+    monkeypatch.setattr(run_once.config, "CITIES", [CITY])
+
+    async def fake_check_one(client, conn, city):
+        pass
+
+    monkeypatch.setattr(run_once, "_check_one", fake_check_one)
+
+    called = []
+    monkeypatch.setattr(run_once.sync, "push_new_ids", lambda *a, **k: called.append(True))
+
+    await run_once.main()
+
+    assert called == []
