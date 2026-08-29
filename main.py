@@ -11,7 +11,7 @@ import wg_gesucht
 from errors import is_transient
 from logger import setup_logger
 from models import City
-from notifier import send_message
+from notifier import send_message, verify_bot_token
 from scraper import build_search_url, fetch_search_results
 from tracker import check_city, check_city_immoportal, check_city_immowelt, check_city_wg_gesucht
 
@@ -125,6 +125,22 @@ async def _check_source_health(client: httpx.AsyncClient, logger, source: str, f
             _health_alert_active[source] = False
 
 
+async def _check_bot_token(logger) -> None:
+    """Проверяет BOT_TOKEN каждый цикл через Telegram getMe. Если токен
+    битый - здесь физически нельзя послать Telegram-алерт (это же он и
+    сломан), поэтому единственный сигнал - явная ERROR-запись в лог. Не
+    покрывает облачный BOT_TOKEN отдельно (у run_once.py свой .env-независимый
+    секрет) - см. verify_bot_token в run_once.py, где та же проверка роняет
+    сам workflow, что и есть настоящий сигнал наружу для облака (см.
+    инцидент 2026-08-28/29, когда битый токен в облаке сутки был незаметен
+    именно потому, что ни локальная проверка его не видела, ни облако не
+    падало явно)."""
+    try:
+        await asyncio.wait_for(verify_bot_token(config.BOT_TOKEN), timeout=_CHECK_TIMEOUT_SECONDS)
+    except Exception as exc:
+        logger.error(f"[health] BOT_TOKEN невалиден или Telegram недоступен - уведомления не будут доходить: {exc}")
+
+
 async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:
     await _run_check(city.name, check_city(
         client, conn, city, config.SEARCH_PRICE_BUFFER, config.MAX_WOHNFLAECHE_QM,
@@ -156,6 +172,8 @@ async def main() -> None:
 
     async with httpx.AsyncClient(headers=headers, timeout=20, follow_redirects=True) as client:
         while True:
+            await _check_bot_token(logger)
+
             cloud_ids: set[str] = set()
             if config.GITHUB_TOKEN:
                 try:

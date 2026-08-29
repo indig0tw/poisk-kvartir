@@ -9,6 +9,7 @@ import sync
 import tracker
 from errors import is_transient
 from models import City
+from notifier import verify_bot_token
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("apartment_finder")
@@ -59,6 +60,19 @@ async def main() -> None:
     # (например, в тестах) молча и необратимо ломал бы tracker.storage для
     # всего процесса, включая совсем не связанные тесты SQLite-бэкенда.
     tracker.storage = storage_json
+
+    # Проверяем BOT_TOKEN ДО начала проверок - если он битый (см.
+    # инцидент 2026-08-28/29: BOM-символ затесался в секрет при неаккуратной
+    # правке, все send_message на весь день стали падать с 404, а сам
+    # workflow всё равно репортил success, потому что каждая ошибка отправки
+    # ловится и логируется внутри _run_check, не роняя процесс). Если тут
+    # упасть явно - GitHub Actions пометит прогон как failed, и это будет
+    # видно в списке запусков без необходимости лезть в лог руками.
+    try:
+        await verify_bot_token(config.BOT_TOKEN)
+    except Exception as exc:
+        logger.error(f"BOT_TOKEN невалиден - без рабочего токена продолжать нет смысла: {exc}")
+        raise
 
     conn = storage_json.connect(CLOUD_STATE_PATH)
     initial_ids = set(conn.seen_ids)

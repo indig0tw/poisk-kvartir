@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 import storage_json
 import tracker
@@ -6,6 +7,10 @@ from models import City
 from scraper import AdDetails, SearchResult
 
 CITY = City("Köln", "Köln", 677.0)
+
+
+async def _fake_verify_ok(bot_token):
+    pass
 
 
 async def test_check_city_works_with_json_storage_backend(monkeypatch, tmp_path):
@@ -56,6 +61,7 @@ async def test_main_pushes_only_newly_found_ids(monkeypatch, tmp_path):
     # не через monkeypatch) - без этой строки оно бы утекло в остальные
     # тесты, которые рассчитывают на SQLite-бэкенд по умолчанию.
     monkeypatch.setattr(tracker, "storage", storage_json)
+    monkeypatch.setattr(run_once, "verify_bot_token", _fake_verify_ok)
 
     state_path = tmp_path / "cloud_seen.json"
     state_path.write_text('["existing"]', encoding="utf-8")
@@ -86,6 +92,7 @@ async def test_main_skips_push_without_github_token(monkeypatch, tmp_path):
     import run_once
 
     monkeypatch.setattr(tracker, "storage", storage_json)
+    monkeypatch.setattr(run_once, "verify_bot_token", _fake_verify_ok)
 
     state_path = tmp_path / "cloud_seen.json"
     state_path.write_text("[]", encoding="utf-8")
@@ -104,3 +111,37 @@ async def test_main_skips_push_without_github_token(monkeypatch, tmp_path):
     await run_once.main()
 
     assert called == []
+
+
+async def test_main_raises_and_skips_everything_when_bot_token_is_invalid(monkeypatch, tmp_path):
+    """Воспроизводит инцидент 2026-08-28/29: BOM в BOT_TOKEN ломал каждую
+    отправку в Telegram, но run_once.py всё равно отчитывался о прогоне
+    городов как об успехе (сам workflow не падал) - целые сутки никто не
+    заметил, что уведомления не доходят. Теперь битый токен должен
+    останавливать прогон ДО того, как он начнёт бессмысленно дёргать сайты -
+    и это должно всплыть как явный fail самого workflow в GitHub Actions."""
+    import run_once
+
+    monkeypatch.setattr(tracker, "storage", storage_json)
+
+    async def fake_verify_fails(bot_token):
+        raise httpx.HTTPStatusError("404 Not Found", request=None, response=None)
+
+    monkeypatch.setattr(run_once, "verify_bot_token", fake_verify_fails)
+
+    state_path = tmp_path / "cloud_seen.json"
+    state_path.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(run_once, "CLOUD_STATE_PATH", str(state_path))
+    monkeypatch.setattr(run_once.config, "CITIES", [CITY])
+
+    checked = []
+
+    async def fake_check_one(client, conn, city):
+        checked.append(city)
+
+    monkeypatch.setattr(run_once, "_check_one", fake_check_one)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await run_once.main()
+
+    assert checked == []

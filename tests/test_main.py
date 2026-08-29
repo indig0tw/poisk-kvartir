@@ -140,3 +140,41 @@ async def test_immoportal_count_returns_zero_for_unsupported_city(monkeypatch):
 
     count = await main._immoportal_count(None, City("Nowhere", "Nowhere", 500.0))
     assert count == 0
+
+
+class _RecordingLogger(_NullLogger):
+    def __init__(self):
+        self.errors = []
+
+    def error(self, message, *args, **kwargs):
+        self.errors.append(message)
+
+
+async def test_check_bot_token_logs_error_without_raising_on_invalid_token(monkeypatch):
+    """Воспроизводит инцидент 2026-08-28/29 (BOM в BOT_TOKEN): main.py -
+    бесконечный цикл, он не должен падать целиком из-за битого токена
+    (в отличие от run_once.py, для которого это фатально), но проблема
+    обязана быть явно видна в логе, а не потеряться среди обычных сетевых
+    предупреждений."""
+    async def fake_verify_fails(bot_token):
+        raise Exception("404 Not Found")
+
+    monkeypatch.setattr(main, "verify_bot_token", fake_verify_fails)
+    logger = _RecordingLogger()
+
+    await main._check_bot_token(logger)
+
+    assert len(logger.errors) == 1
+    assert "BOT_TOKEN" in logger.errors[0]
+
+
+async def test_check_bot_token_is_silent_on_valid_token(monkeypatch):
+    async def fake_verify_ok(bot_token):
+        pass
+
+    monkeypatch.setattr(main, "verify_bot_token", fake_verify_ok)
+    logger = _RecordingLogger()
+
+    await main._check_bot_token(logger)
+
+    assert logger.errors == []
