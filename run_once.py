@@ -71,8 +71,14 @@ async def main() -> None:
     try:
         await verify_bot_token(config.BOT_TOKEN)
     except Exception as exc:
-        logger.error(f"BOT_TOKEN невалиден - без рабочего токена продолжать нет смысла: {exc}")
-        raise
+        if is_transient(exc):
+            # Временная сетевая проблема, не признак битого токена - не
+            # роняем прогон из-за неё, дальнейшие проверки сами залогируют
+            # то же самое как обычные "временная ошибка сети" в _run_check.
+            logger.warning(f"Telegram временно недоступен при проверке токена, продолжаем: {exc}")
+        else:
+            logger.error(f"BOT_TOKEN невалиден - без рабочего токена продолжать нет смысла: {exc}")
+            raise
 
     conn = storage_json.connect(CLOUD_STATE_PATH)
     initial_ids = set(conn.seen_ids)

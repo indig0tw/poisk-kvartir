@@ -145,9 +145,13 @@ async def test_immoportal_count_returns_zero_for_unsupported_city(monkeypatch):
 class _RecordingLogger(_NullLogger):
     def __init__(self):
         self.errors = []
+        self.warnings = []
 
     def error(self, message, *args, **kwargs):
         self.errors.append(message)
+
+    def warning(self, message, *args, **kwargs):
+        self.warnings.append(message)
 
 
 async def test_check_bot_token_logs_error_without_raising_on_invalid_token(monkeypatch):
@@ -178,3 +182,24 @@ async def test_check_bot_token_is_silent_on_valid_token(monkeypatch):
     await main._check_bot_token(logger)
 
     assert logger.errors == []
+
+
+async def test_check_bot_token_logs_warning_not_error_on_transient_network_failure(monkeypatch):
+    """Раньше любая ошибка при проверке токена (включая обычный
+    "сеть ещё не поднялась после старта ПК") логировалась как ERROR
+    "BOT_TOKEN невалиден" - выглядело так, будто именно Telegram сломался
+    при каждом запуске бота, хотя на самом деле сеть просто не успела
+    подняться. Временные сетевые ошибки (httpx.RequestError и подобные,
+    см. errors.is_transient) должны идти в warning, не в error."""
+    import httpx
+
+    async def fake_verify_network_down(bot_token):
+        raise httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+
+    monkeypatch.setattr(main, "verify_bot_token", fake_verify_network_down)
+    logger = _RecordingLogger()
+
+    await main._check_bot_token(logger)
+
+    assert logger.errors == []
+    assert len(logger.warnings) == 1

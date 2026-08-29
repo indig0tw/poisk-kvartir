@@ -138,7 +138,17 @@ async def _check_bot_token(logger) -> None:
     try:
         await asyncio.wait_for(verify_bot_token(config.BOT_TOKEN), timeout=_CHECK_TIMEOUT_SECONDS)
     except Exception as exc:
-        logger.error(f"[health] BOT_TOKEN невалиден или Telegram недоступен - уведомления не будут доходить: {exc}")
+        if is_transient(exc):
+            # Обычная временная сетевая проблема (например, сеть ещё не
+            # поднялась сразу после включения ПК/старта бота) - не признак
+            # битого токена, просто попробуем на следующем цикле, как и
+            # везде в этом файле. Раньше это тоже логировалось как ERROR
+            # "BOT_TOKEN невалиден", что выглядело как поломка Telegram при
+            # каждом старте бота, хотя на самом деле сеть просто не успела
+            # подняться.
+            logger.warning(f"[health] Telegram временно недоступен, попробуем на следующем цикле: {exc}")
+        else:
+            logger.error(f"[health] BOT_TOKEN невалиден - уведомления не будут доходить: {exc}")
 
 
 async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> None:

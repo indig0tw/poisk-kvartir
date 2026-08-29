@@ -124,8 +124,11 @@ async def test_main_raises_and_skips_everything_when_bot_token_is_invalid(monkey
 
     monkeypatch.setattr(tracker, "storage", storage_json)
 
+    request = httpx.Request("GET", "https://api.telegram.org/bottoken/getMe")
+    response = httpx.Response(404, request=request)
+
     async def fake_verify_fails(bot_token):
-        raise httpx.HTTPStatusError("404 Not Found", request=None, response=None)
+        raise httpx.HTTPStatusError("404 Not Found", request=request, response=response)
 
     monkeypatch.setattr(run_once, "verify_bot_token", fake_verify_fails)
 
@@ -145,3 +148,34 @@ async def test_main_raises_and_skips_everything_when_bot_token_is_invalid(monkey
         await run_once.main()
 
     assert checked == []
+
+
+async def test_main_continues_when_token_check_hits_transient_network_error(monkeypatch, tmp_path):
+    """Временный сбой сети при проверке токена (например, DNS ещё не готов
+    на раннере) не должен ронять весь workflow как "невалидный токен" -
+    только реально невалидный токен (test выше) обязан валить job."""
+    import run_once
+
+    monkeypatch.setattr(tracker, "storage", storage_json)
+
+    async def fake_verify_network_down(bot_token):
+        raise httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+
+    monkeypatch.setattr(run_once, "verify_bot_token", fake_verify_network_down)
+
+    state_path = tmp_path / "cloud_seen.json"
+    state_path.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(run_once, "CLOUD_STATE_PATH", str(state_path))
+    monkeypatch.setattr(run_once.config, "GITHUB_TOKEN", None)
+    monkeypatch.setattr(run_once.config, "CITIES", [CITY])
+
+    checked = []
+
+    async def fake_check_one(client, conn, city):
+        checked.append(city)
+
+    monkeypatch.setattr(run_once, "_check_one", fake_check_one)
+
+    await run_once.main()
+
+    assert checked == [CITY]
