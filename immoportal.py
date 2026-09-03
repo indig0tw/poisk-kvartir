@@ -23,6 +23,9 @@ SLUGS = {
     "Solingen": "solingen",
     "Moers": "moers",
     "Leverkusen": "leverkusen",
+    "Neukirchen-Vluyn": "neukirchen-vluyn",
+    "Gladbeck": "gladbeck",
+    "Bottrop": "bottrop",
 }
 
 _NUMBER_RE = re.compile(r"([\d.,]+)")

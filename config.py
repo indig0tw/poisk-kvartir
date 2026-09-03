@@ -17,17 +17,18 @@ CITIES = [
     # районом Кёльна "Mülheim" (почтовые индексы 5106x вместо настоящих
     # 454xx) и отдаёт объявления не оттуда.
     City("Mülheim an der Ruhr", "Mülheim (Ruhr)", 440.50),
-    City("Neuss", "Neuss", 590.00),
-    City("Köln", "Köln", 677.00),
-    City("Düsseldorf", "Düsseldorf", 565.00),
-    City("Essen", "Essen", 482.50),
-    City("Oberhausen", "Oberhausen", 433.50),
-    City("Hilden", "Hilden", 551.50),
-    City("Münster", "Münster", 594.00),
     City("Wuppertal", "Wuppertal", 466.00),
-    City("Solingen", "Solingen", 510.00),
     City("Moers", "Moers", 460.50),
-    City("Leverkusen", "Leverkusen", 525.00),
+    # Тот же Vergleichsraum и тот же лимит, что у Moers - Jobcenter Kreis
+    # Wesel ведёт Kamp-Lintfort/Moers/Neukirchen-Vluyn единой таблицей
+    # (подтверждено на jobcenter-kreis-wesel.de).
+    City("Neukirchen-Vluyn", "Neukirchen-Vluyn", 460.50),
+    # Kreis Recklinghausen с 2025 года - единый Vergleichsraum на весь округ
+    # (раньше было по городам отдельно): 350 Nettokaltmiete + 106 медиана
+    # холодных коммунальных для ~50 м² (отчёт empirica "Mietobergrenzen im
+    # Kreis Recklinghausen - Aktualisierung 2025", Stand Februar 2025).
+    City("Gladbeck", "Gladbeck", 456.00),
+    City("Bottrop", "Bottrop", 436.00),
 ]
 
 # Жёсткий потолок площади (м²) - выше не показываем, даже если цена

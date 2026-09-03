@@ -23,6 +23,9 @@ SLUGS = {
     "Solingen": "solingen",
     "Moers": "moers",
     "Leverkusen": "leverkusen",
+    "Neukirchen-Vluyn": "neukirchen-vluyn",
+    "Gladbeck": "gladbeck",
+    "Bottrop": "bottrop",
 }
 
 # Immowelt не отдаёт цену/площадь через отдельные HTML-поля в выдаче поиска -

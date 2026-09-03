@@ -23,6 +23,9 @@ CITY_IDS = {
     "Solingen": 121,
     "Moers": 275,
     "Leverkusen": 78,
+    "Neukirchen-Vluyn": 2827,
+    "Gladbeck": 2967,
+    "Bottrop": 14,
 }
 
 # ".2." в пути - категория "Wohnungen" (целые квартиры), а не "WG-Zimmer"
