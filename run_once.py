@@ -38,11 +38,6 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City) -> None:
         config.BOT_TOKEN, config.CHAT_ID,
     ))
 
-    await _run_check(f"WG-Gesucht/{city.name}", tracker.check_city_wg_gesucht(
-        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-        config.BOT_TOKEN, config.CHAT_ID,
-    ))
-
     await _run_check(f"Immoportal/{city.name}", tracker.check_city_immoportal(
         client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
         config.BOT_TOKEN, config.CHAT_ID,

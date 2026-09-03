@@ -7,13 +7,12 @@ import immoportal
 import immowelt
 import storage
 import sync
-import wg_gesucht
 from errors import is_transient
 from logger import setup_logger
 from models import City
 from notifier import send_message, verify_bot_token
 from scraper import build_search_url, fetch_search_results
-from tracker import check_city, check_city_immoportal, check_city_immowelt, check_city_wg_gesucht
+from tracker import check_city, check_city_immoportal, check_city_immowelt
 
 
 # Жёсткий потолок на одну проверку город+источник. httpx timeout=20 на
@@ -50,10 +49,10 @@ _HEALTH_CHECK_SAMPLE_SIZE = 3
 _health_alert_active: dict[str, bool] = {}
 
 # Сколько циклов подряд источник должен вернуть 0 объявлений, прежде чем
-# слать уведомление - у WG-Gesucht на практике бывает разовая защитная
-# страница ("Überprüfung") на один цикл без всякой реальной поломки (см.
-# 2026-08-20), с одного нулевого результата такое не отличить от настоящей
-# поломки вроде смены вёрстки Kleinanzeigen 2026-08-19.
+# слать уведомление - у некоторых сайтов на практике бывает разовая
+# защитная страница на один цикл без всякой реальной поломки, с одного
+# нулевого результата такое не отличить от настоящей поломки вроде смены
+# вёрстки Kleinanzeigen 2026-08-19.
 _HEALTH_ALERT_THRESHOLD = 2
 
 _health_fail_streak: dict[str, int] = {}
@@ -69,13 +68,6 @@ async def _immowelt_count(client: httpx.AsyncClient, city: City) -> int:
     return len(await immowelt.fetch_listings(client, url, 5))
 
 
-async def _wg_gesucht_count(client: httpx.AsyncClient, city: City) -> int:
-    url = wg_gesucht.build_search_url(city.name)
-    if url is None:
-        return 0
-    return len(await wg_gesucht.fetch_search_results(client, url, 5))
-
-
 async def _immoportal_count(client: httpx.AsyncClient, city: City) -> int:
     url = immoportal.build_search_url(city.name)
     if url is None:
@@ -86,7 +78,6 @@ async def _immoportal_count(client: httpx.AsyncClient, city: City) -> int:
 _HEALTH_CHECK_SOURCES = (
     ("Kleinanzeigen", _kleinanzeigen_count),
     ("Immowelt", _immowelt_count),
-    ("WG-Gesucht", _wg_gesucht_count),
     ("Immoportal", _immoportal_count),
 )
 
@@ -158,11 +149,6 @@ async def _check_one(client: httpx.AsyncClient, conn, city: City, logger) -> Non
     ), logger)
 
     await _run_check(f"Immowelt/{city.name}", check_city_immowelt(
-        client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
-        config.BOT_TOKEN, config.CHAT_ID,
-    ), logger)
-
-    await _run_check(f"WG-Gesucht/{city.name}", check_city_wg_gesucht(
         client, conn, city, config.MAX_WOHNFLAECHE_QM, config.MAX_LISTINGS_PER_CITY,
         config.BOT_TOKEN, config.CHAT_ID,
     ), logger)

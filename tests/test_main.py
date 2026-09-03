@@ -35,8 +35,8 @@ def _reset(monkeypatch, source: str):
 
 
 async def test_health_check_does_not_alert_on_first_failed_cycle(monkeypatch):
-    # Один цикл с нулём - это ещё может быть разовая защита сайта (как у
-    # WG-Gesucht), не повод сразу слать уведомление.
+    # Один цикл с нулём - это ещё может быть разовая защита сайта, не повод
+    # сразу слать уведомление.
     _reset(monkeypatch, "TestSource")
     sent = _FakeSentMessages()
     monkeypatch.setattr(main, "send_message", sent)
@@ -121,17 +121,9 @@ async def test_health_check_sources_are_independent(monkeypatch):
     assert main._health_alert_active["Healthy"] is False
 
 
-async def test_health_check_sources_cover_all_four_sites():
+async def test_health_check_sources_cover_all_sites():
     names = [name for name, _ in main._HEALTH_CHECK_SOURCES]
-    assert names == ["Kleinanzeigen", "Immowelt", "WG-Gesucht", "Immoportal"]
-
-
-async def test_wg_gesucht_count_returns_zero_for_unsupported_city(monkeypatch):
-    monkeypatch.setattr(main.wg_gesucht, "build_search_url", lambda name: None)
-    from models import City
-
-    count = await main._wg_gesucht_count(None, City("Nowhere", "Nowhere", 500.0))
-    assert count == 0
+    assert names == ["Kleinanzeigen", "Immowelt", "Immoportal"]
 
 
 async def test_immoportal_count_returns_zero_for_unsupported_city(monkeypatch):
